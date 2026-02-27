@@ -30,6 +30,9 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v6
 
+      - name: Install Python
+        run: sudo apt-get update && sudo apt-get install -y python3
+
       - name: Enable -proposed
         run: python3 enable_proposed.py
 
