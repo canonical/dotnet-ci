@@ -73,7 +73,7 @@ def main():
     elif dotnet_version == 9:
         build_cmd = """./build.sh \\
         --configuration Release \\
-        --verbosity detailed \\
+        --verbosity normal \\
         --source-build \\
         --ci \\
         --clean-while-building"""
