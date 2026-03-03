@@ -48,8 +48,7 @@ def install_previous_dotnet(dotnet_version: int, dotnet_vmr_root: Path):
         current_ubuntu_version = get_current_ubuntu_version()
         if current_ubuntu_version in ["22.04", "24.04", "26.04"]:
             # Add backports PPA for older versions of .NET on newer Ubuntu releases
-            print(f"""Adding backports PPA for .NET {dotnet_version} on
-                   Ubuntu {current_ubuntu_version}...""", flush=True)
+            print(f"Adding backports PPA for .NET {dotnet_version} on Ubuntu {current_ubuntu_version}...", flush=True)
             run_command("add-apt-repository -y ppa:dotnet/backports", cwd=Path.home())
 
         print("Installing .NET SDK for source-build...", flush=True)
@@ -117,12 +116,12 @@ def build_cmd(dotnet_vmr_root: Path, dotnet_version: int, build_id: str) -> str:
         cmd.append(f"--with-sdk {dotnet_vmr_root}/previously-built-dotnet")
 
     # Additional MSBuild parameters:
-    # Binary scan is failing on the CI with "An error occurred trying to start process
-    # 'file' with working directory '/__w/dotnet-ci/dotnet-ci/dotnet-vmr/eng'.
-    # No such file or directory" error, so we will skip it for now.
     msbuild_params = [
         "/p:SkipPortableRuntimeBuild=true",
         "/p:ContinueOnPrebuiltBaselineError=true",
+        # Binary scan is failing on the CI with "An error occurred trying to start process
+        # 'file' with working directory '/__w/dotnet-ci/dotnet-ci/dotnet-vmr/eng'.
+        # No such file or directory" error, so we will skip it for now.
         "/p:SkipBinaryScan=true",
     ]
 
