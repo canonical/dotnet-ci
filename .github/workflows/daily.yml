@@ -6,7 +6,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 180
 
     strategy:
       fail-fast: false
@@ -23,7 +23,6 @@ jobs:
           - release/10.0.1xx
     container:
       image: ${{ matrix.container_image }}
-      options: --security-opt seccomp=unconfined
       env:
         DEBIAN_FRONTEND: noninteractive
     steps:
