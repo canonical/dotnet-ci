@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, linux, x64, noble, xlarge ]
     timeout-minutes: 180
 
     strategy:
@@ -86,8 +86,6 @@ jobs:
 
       - name: Build .NET
         id: build
-        env:
-          MSBUILDDISABLENODEREUSE: 1
         run: |
           DOTNET_VERSION="${{ steps.metadata.outputs.dotnet_version }}"
           BRANCH="${{ matrix.branch }}"
