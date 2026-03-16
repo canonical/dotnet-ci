@@ -127,11 +127,6 @@ def build_cmd(dotnet_vmr_root: Path, dotnet_version: int, build_id: str) -> str:
         # "/__w/dotnet-ci/dotnet-ci/dotnet-vmr/artifacts/log/Release/binary-report/NewBinaries.txt"
         # because it was not found.
         "/p:SkipDetectBinaries=true",
-        # Disabling shared compilation and razor build server to avoid potential issues with compiler
-        # server in CI environment where build hangs indefinitely waiting on a compiler shutdown that
-        # never happens.
-        "/p:UseSharedCompilation=false",
-        "/p:UseRazorBuildServer=false",
     ]
 
     if len(msbuild_params) > 0:
@@ -172,6 +167,23 @@ def main():
     install_previous_dotnet(dotnet_version, dotnet_vmr_root)
 
     prepare_previously_source_built_artifacts(dotnet_version, dotnet_vmr_root)
+
+    # ===================================================================
+    # Create a global MSBuild override file to prevent compiler deadlocks
+    # ===================================================================
+    override_file = Path("/tmp/disable-nodes.targets")
+    with open(override_file, "w", encoding="utf-8") as f:
+        f.write("""<Project>
+  <PropertyGroup>
+    <UseSharedCompilation>false</UseSharedCompilation>
+    <UseRazorBuildServer>false</UseRazorBuildServer>
+  </PropertyGroup>
+</Project>""")
+
+    # Instruct ALL nested MSBuild processes to implicitly import this file
+    os.environ["CustomAfterMicrosoftCommonTargets"] = str(override_file)
+    os.environ["CustomAfterMicrosoftCommonCrossTargetingTargets"] = str(override_file)
+    # ===================================================================
 
     print(f"Building .NET {dotnet_version} VMR at: {dotnet_vmr_root}", flush=True)
 
