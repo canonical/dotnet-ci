@@ -91,6 +91,11 @@ jobs:
         run: |
           DOTNET_VERSION="${{ steps.metadata.outputs.dotnet_version }}"
           BRANCH="${{ matrix.branch }}"
+
+          echo "Patching VMR to disable persistent compiler nodes..."
+          # Safely inject the properties right before the closing </Project> tag
+          sed -i 's|</Project>|<PropertyGroup><UseSharedCompilation>false</UseSharedCompilation><UseRazorBuildServer>false</UseRazorBuildServer></PropertyGroup></Project>|' dotnet-vmr/Directory.Build.targets
+
           echo "Building .NET ${DOTNET_VERSION} from branch ${BRANCH}..."
           python3 build_dotnet.py --repo-root dotnet-vmr --dotnet-version "$DOTNET_VERSION"
 
