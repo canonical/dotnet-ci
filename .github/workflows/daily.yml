@@ -91,6 +91,8 @@ jobs:
         run: |
           DOTNET_VERSION="${{ steps.metadata.outputs.dotnet_version }}"
           BRANCH="${{ matrix.branch }}"
+          # Unsetting CI as this is causing errors building aspire on .NET 8 and .NET 9 branches
+          unset CI
           echo "Building .NET ${DOTNET_VERSION} from branch ${BRANCH}..."
           python3 build_dotnet.py --repo-root dotnet-vmr --dotnet-version "$DOTNET_VERSION"
 
