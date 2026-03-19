@@ -35,6 +35,13 @@ jobs:
       - name: Enable -proposed
         run: python3 eng/enable_proposed.py
 
+      - name: Add backports CMake repository
+        if: matrix.container_image == 'docker.io/library/ubuntu:22.04' && matrix.branch == 'main'
+        run: |
+          apt-get update
+          apt-get install -y software-properties-common
+          add-apt-repository -y ppa:dotnet-bootstrap/cmake-jammy-backports
+
       - name: Install Required Packages
         run: |
           apt-get update

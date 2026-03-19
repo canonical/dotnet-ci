@@ -50,11 +50,6 @@ def install_previous_dotnet(dotnet_version: int, dotnet_vmr_root: Path):
             # Add backports PPA for older versions of .NET on newer Ubuntu releases
             print(f"Adding backports PPA for .NET {dotnet_version} on Ubuntu {current_ubuntu_version}...", flush=True)
             run_command("add-apt-repository -y ppa:dotnet/backports", cwd=Path.home())
-            # Add CMake backport PPA if on Ubuntu 22.04, which is required for .NET Devel version
-            if current_ubuntu_version == "22.04" and dotnet_version == DOTNET_DEVEL_VERSION:
-                print(f"Adding CMake backports PPA for Ubuntu {current_ubuntu_version}...", flush=True)
-                run_command("add-apt-repository -y ppa:dotnet-bootstrap/cmake-jammy-backports", cwd=Path.home())
-
         print("Installing .NET SDK for source-build...", flush=True)
         install_cmd = f"""apt-get update && apt-get install -y dotnet-sdk-{dotnet_version}.0 \\
                 dotnet-sdk-{dotnet_version}.0-source-built-artifacts"""
