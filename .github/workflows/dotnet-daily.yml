@@ -124,3 +124,115 @@ jobs:
             !dotnet-vmr/artifacts/obj/
           retention-days: 7
 
+  test:
+    needs: build
+    if: ${{ !cancelled() }}
+    runs-on: [ self-hosted, linux, x64, noble, xlarge ]
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        container_image:
+          - docker.io/library/ubuntu:22.04
+          - docker.io/library/ubuntu:24.04
+          - docker.io/library/ubuntu:25.10
+          - docker.io/library/ubuntu:26.04
+        dotnet_version:
+          - "8"
+          - "9"
+          - "10"
+          - "11"
+    container:
+      image: ${{ matrix.container_image }}
+      options: --security-opt seccomp=unconfined
+      env:
+        DEBIAN_FRONTEND: noninteractive
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Set metadata
+        id: metadata
+        run: |
+          # Extract Ubuntu release name from /etc/os-release
+          UBUNTU_RELEASE=$(. /etc/os-release && echo $VERSION_CODENAME)
+          echo "ubuntu_release=$UBUNTU_RELEASE" >> $GITHUB_OUTPUT
+          echo "Testing .NET ${{ matrix.dotnet_version }} on Ubuntu $UBUNTU_RELEASE"
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: dotnet${{ matrix.dotnet_version }}-${{ steps.metadata.outputs.ubuntu_release }}-${{ github.run_id }}-artifacts
+          path: artifacts
+
+      - name: Install basic tools
+        run: apt-get update && apt-get install --yes git wget tar sudo
+
+      - name: Clone dotnet-regular-tests
+        run: git clone https://github.com/canonical/dotnet-regular-tests.git
+
+      - name: Install test dependencies
+        timeout-minutes: 5
+        run: |
+          apt-get update && apt-get install --yes $(grep -A 3 '^#### apt$' dotnet-regular-tests/README.md | tail -n 1 | tr -d '`')
+
+      - name: Extract .NET SDK
+        id: extract-sdk
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          SDK_TAR=$(find artifacts -name 'dotnet-sdk-*.tar.gz' -type f)
+          if [ -z "$SDK_TAR" ]; then
+            echo "Error: dotnet-sdk-*.tar.gz not found in artifacts - build likely failed"
+            echo "sdk_found=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          echo "Found SDK: $SDK_TAR"
+
+          # Extract to /opt/dotnet
+          mkdir -p /opt/dotnet
+          tar -xzf "$SDK_TAR" -C /opt/dotnet
+
+          # Verify extraction
+          if [ ! -f /opt/dotnet/dotnet ]; then
+            echo "Error: dotnet binary not found after extraction"
+            echo "sdk_found=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          echo "sdk_found=true" >> $GITHUB_OUTPUT
+          echo "sdk_path=/opt/dotnet" >> $GITHUB_OUTPUT
+          /opt/dotnet/dotnet --info
+
+      - name: Download test runner
+        if: steps.extract-sdk.outputs.sdk_found == 'true'
+        run: |
+          set -euo pipefail
+          cd dotnet-regular-tests
+          wget --no-verbose https://github.com/canonical/dotnet-test-runner/releases/latest/download/turkey.tar.gz
+          tar xf turkey.tar.gz
+
+      - name: Run tests
+        if: steps.extract-sdk.outputs.sdk_found == 'true'
+        run: |
+          set -euo pipefail
+          cd dotnet-regular-tests
+          echo "Creating testrunner user"
+          useradd testrunner --create-home
+          chown --recursive testrunner:testrunner /home/testrunner/
+          mkdir TestResults
+          echo "Turkey version:"
+          ${{ steps.extract-sdk.outputs.sdk_path }}/dotnet turkey/Turkey.dll --version
+          echo "Running tests with .NET ${{ matrix.dotnet_version }} on ${{ matrix.container_image }}"
+          ${{ steps.extract-sdk.outputs.sdk_path }}/dotnet turkey/Turkey.dll -v --timeout 600 --log-directory TestResults --trait github-ci
+
+      - name: Upload Test Results
+        if: steps.extract-sdk.outputs.sdk_found == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: TestResults-${{ steps.metadata.outputs.ubuntu_release }}-dotnet${{ matrix.dotnet_version }}
+          path: dotnet-regular-tests/TestResults
+          retention-days: 7
+
