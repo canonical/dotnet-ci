@@ -124,11 +124,26 @@ jobs:
             !dotnet-vmr/artifacts/obj/
           retention-days: 7
 
+      - name: Create build success sentinel
+        if: success()
+        run: echo "Build succeeded" > build-success.txt
+
+      - name: Upload build success sentinel
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-success-dotnet${{ steps.metadata.outputs.dotnet_version }}-${{ steps.metadata.outputs.ubuntu_release }}-${{ github.run_id }}
+          path: build-success.txt
+          retention-days: 7
+
   test:
     needs: build
     if: ${{ !cancelled() }}
     runs-on: [ self-hosted, linux, x64, noble, xlarge ]
     timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
 
     strategy:
       fail-fast: false
@@ -161,6 +176,20 @@ jobs:
           echo "ubuntu_release=$UBUNTU_RELEASE" >> $GITHUB_OUTPUT
           echo "Testing .NET ${{ matrix.dotnet_version }} on Ubuntu $UBUNTU_RELEASE"
 
+      - name: Download build success sentinel
+        id: check-build
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: build-success-dotnet${{ matrix.dotnet_version }}-${{ steps.metadata.outputs.ubuntu_release }}-${{ github.run_id }}
+
+      - name: Check build status
+        run: |
+          if [[ "${{ steps.check-build.outcome }}" != "success" ]]; then
+            echo "Corresponding build job failed — skipping tests"
+            exit 1
+          fi
+
       - name: Download build artifacts
         uses: actions/download-artifact@v7
         with:
@@ -179,35 +208,15 @@ jobs:
           apt-get update && apt-get install --yes $(grep -A 3 '^#### apt$' dotnet-regular-tests/README.md | tail -n 1 | tr -d '`')
 
       - name: Extract .NET SDK
-        id: extract-sdk
-        continue-on-error: true
         run: |
           set -euo pipefail
-          SDK_TAR=$(find artifacts -name 'dotnet-sdk-*.tar.gz' -type f)
-          if [ -z "$SDK_TAR" ]; then
-            echo "Error: dotnet-sdk-*.tar.gz not found in artifacts - build likely failed"
-            echo "sdk_found=false" >> $GITHUB_OUTPUT
-            exit 1
-          fi
+          SDK_TAR=$(find artifacts -name 'dotnet-sdk-*.tar.gz' -type f | head -n 1)
           echo "Found SDK: $SDK_TAR"
-
-          # Extract to /opt/dotnet
           mkdir -p /opt/dotnet
           tar -xzf "$SDK_TAR" -C /opt/dotnet
-
-          # Verify extraction
-          if [ ! -f /opt/dotnet/dotnet ]; then
-            echo "Error: dotnet binary not found after extraction"
-            echo "sdk_found=false" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-
-          echo "sdk_found=true" >> $GITHUB_OUTPUT
-          echo "sdk_path=/opt/dotnet" >> $GITHUB_OUTPUT
           /opt/dotnet/dotnet --info
 
       - name: Download test runner
-        if: steps.extract-sdk.outputs.sdk_found == 'true'
         run: |
           set -euo pipefail
           cd dotnet-regular-tests
@@ -215,7 +224,6 @@ jobs:
           tar xf turkey.tar.gz
 
       - name: Run tests
-        if: steps.extract-sdk.outputs.sdk_found == 'true'
         run: |
           set -euo pipefail
           cd dotnet-regular-tests
@@ -224,12 +232,12 @@ jobs:
           chown --recursive testrunner:testrunner /home/testrunner/
           mkdir TestResults
           echo "Turkey version:"
-          ${{ steps.extract-sdk.outputs.sdk_path }}/dotnet turkey/Turkey.dll --version
+          /opt/dotnet/dotnet turkey/Turkey.dll --version
           echo "Running tests with .NET ${{ matrix.dotnet_version }} on ${{ matrix.container_image }}"
-          ${{ steps.extract-sdk.outputs.sdk_path }}/dotnet turkey/Turkey.dll -v --timeout 600 --log-directory TestResults --trait github-ci
+          /opt/dotnet/dotnet turkey/Turkey.dll -v --timeout 600 --log-directory TestResults --trait github-ci
 
       - name: Upload Test Results
-        if: steps.extract-sdk.outputs.sdk_found == 'true'
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: TestResults-${{ steps.metadata.outputs.ubuntu_release }}-dotnet${{ matrix.dotnet_version }}
