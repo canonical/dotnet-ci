@@ -5,6 +5,7 @@ on:
 
 jobs:
   prepare-source-package:
+    name: Prepare .NET source package
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -30,10 +31,12 @@ jobs:
       - name: Build flamenco
         id: build-flamenco
         uses: canonical/craft-actions/snapcraft/pack@main
+        env:
+          SNAPCRAFT_ENABLE_EXPERIMENTAL_EXTENSIONS: "1"
         with:
-          channel: latest/stable
+          channel: latest/edge
           path: flamenco
-          verbosity: debug
+          verbosity: verbose
 
       - name: Install flamenco
         run: sudo snap install --dangerous flamenco/flamenco_*.snap
@@ -120,6 +123,7 @@ jobs:
           include-hidden-files: true
 
   build-source-package:
+    name: Build .NET source package
     runs-on: ubuntu-latest
     needs: prepare-source-package
     defaults:
