@@ -1,0 +1,171 @@
+name: .NET Packages Daily Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  prepare-source-package:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout dotnet-source-build repository
+        uses: actions/checkout@v6
+        with:
+          repository: canonical/dotnet-source-build
+          path: dotnet-source-build
+
+      # -------------------------------------------------------------------------------------------------
+      # This is only temporary while https://github.com/canonical/flamenco/pull/9 is reviewed and merged.
+      # Ideally, this should be replaced with a snap install from the store.
+      - name: Checkout flamenco repository
+        uses: actions/checkout@v6
+        with:
+          repository: canonical/flamenco
+          ref: feat/external-sources-2
+          path: flamenco
+
+      - name: Build flamenco
+        id: build-flamenco
+        uses: canonical/craft-actions/snapcraft/pack@main
+        with:
+          channel: latest/stable
+          path: flamenco
+          verbosity: debug
+
+      - name: Install flamenco
+        run: sudo snap install --dangerous flamenco/flamenco_*.snap
+      # End of temporary steps for flamenco.
+      # -------------------------------------------------------------------------------------------------
+
+      - name: Derive build ID and source version
+        id: derive-versions
+        run: |
+          # Extract the upstream version from the top-most changelog entry.
+          # dpkg-parsechangelog outputs e.g. "10.0.107-10.0.7-0ubuntu1~24.04.1"
+          CHANGELOG_VERSION=$(dpkg-parsechangelog \
+            --file dotnet-source-build/src/changelog.dotnet10.noble \
+            --show-field Version \
+            --count 1)
+
+          # Strip the Debian/Ubuntu suffix (-0ubuntu1~...) to get "10.0.107-10.0.7"
+          UPSTREAM_VERSION="${CHANGELOG_VERSION%%-0ubuntu*}"
+
+          # Split into SDK (e.g. 10.0.107) and Runtime (e.g. 10.0.7)
+          SDK_VERSION="${UPSTREAM_VERSION%%-*}"
+          RUNTIME_VERSION="${UPSTREAM_VERSION##*-}"
+
+          # Increment the patch component of each
+          SDK_PREFIX="${SDK_VERSION%.*}"
+          SDK_PATCH="${SDK_VERSION##*.}"
+          NEW_SDK_VERSION="${SDK_PREFIX}.$((SDK_PATCH + 1))"
+
+          RT_PREFIX="${RUNTIME_VERSION%.*}"
+          RT_PATCH="${RUNTIME_VERSION##*.}"
+          NEW_RT_VERSION="${RT_PREFIX}.$((RT_PATCH + 1))"
+
+          SOURCE_VERSION="${NEW_SDK_VERSION}-${NEW_RT_VERSION}"
+          BUILD_ID="$(date -u +%Y%m%d).1"
+
+          echo "source-version=${SOURCE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "build-id=${BUILD_ID}" >> "$GITHUB_OUTPUT"
+          echo "Derived source-version: ${SOURCE_VERSION}"
+          echo "Derived build-id: ${BUILD_ID}"
+
+      - name: Install devscripts
+        run: sudo apt-get install -y --no-install-recommends devscripts
+
+      - name: Update changelog
+        env:
+          DEBFULLNAME: Ubuntu Toolchains CI
+          DEBEMAIL: noreply@canonical.com
+        run: |
+          NEW_VERSION="${{ steps.derive-versions.outputs.source-version }}-0ubuntu1~24.04.1"
+          dch \
+            --changelog dotnet-source-build/src/changelog.dotnet10.noble \
+            --newversion "${NEW_VERSION}" \
+            --distribution noble \
+            --no-auto-nmu \
+            --check-dirname-level 0 \
+            "New upstream release."
+
+      - name: Build orig tarball
+        id: build-tarball
+        uses: canonical/dotnet-source-build/.github/actions/build-orig-tarball@main
+        with:
+          build-id: ${{ steps.derive-versions.outputs.build-id }}
+          deterministic: false
+          git-commitish: release/10.0.1xx
+          git-repository: https://github.com/dotnet/dotnet
+          source-version: ${{ steps.derive-versions.outputs.source-version }}
+          vendor-name: 'Canonical Ltd.'
+
+      - name: Generate source package
+        run: |
+          mkdir -p dotnet-source-build/dist
+          cp "${{ steps.build-tarball.outputs.tarball-path }}" dotnet-source-build/dist/
+
+          cd dotnet-source-build
+          flamenco pack dotnet10:noble
+
+      - name: Upload source package artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: dotnet10-noble-source-package
+          # We purposely leave out the unpacked tarball
+          path: dotnet-source-build/dist/dotnet10_*
+          if-no-files-found: error
+          include-hidden-files: true
+
+  build-source-package:
+    runs-on: ubuntu-latest
+    needs: prepare-source-package
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v6
+
+      - name: Download source package artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: dotnet10-noble-source-package
+
+      - name: Setup build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sbuild ubuntu-dev-tools tree
+
+          tree -L 2
+
+          # Create $HOME/.mk-sbuild.rc file
+          cat <<EOF > $HOME/.mk-sbuild.rc
+          SCHROOT_CONF_SUFFIX="source-root-users=root,sbuild,admin
+          source-root-groups=root,sbuild,admin
+          preserve-environment=true"
+          EOF
+
+          # Create .sbuildrc file
+          cp dotnet/sbuildrc.pl $HOME/.sbuildrc
+          mkdir -p sbuild/{build,logs,stats}
+
+          # Setup schroot
+          newgrp sbuild
+          mk-sbuild noble
+
+      - name: Build source package
+        run: |
+          sbuild -d noble dotnet10_*.dsc
+          tree -L 2 sbuild
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: dotnet10-noble-deb-packages
+          path: sbuild/build/*.deb
+          if-no-files-found: error
+
