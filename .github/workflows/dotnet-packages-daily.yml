@@ -162,23 +162,23 @@ jobs:
           tree -L 2
 
           # Create $HOME/.mk-sbuild.rc file
-          cat <<EOF > $HOME/.mk-sbuild.rc
+          cat <<EOF > ${HOME}/.mk-sbuild.rc
           SCHROOT_CONF_SUFFIX="source-root-users=root,sbuild,admin
           source-root-groups=root,sbuild,admin
           preserve-environment=true"
           EOF
 
           # Create .sbuildrc file
-          cp dotnet/sbuildrc.pl $HOME/.sbuildrc
-          mkdir -p sbuild/{build,logs,stats}
+          cp dotnet/sbuildrc.pl ${HOME}/.sbuildrc
+          mkdir -p ${HOME}/sbuild/{build,logs,stats}
 
-          # Setup schroot
-          newgrp sbuild
-          mk-sbuild noble
+          # Add runner to the sbuild group and set up the schroot.
+          sudo usermod -aG sbuild $USER
+          sg sbuild -c 'mk-sbuild noble'
 
       - name: Build source package
         run: |
-          sbuild -d noble dotnet10_*.dsc
+          sg sbuild -c 'sbuild -d noble dotnet10_*.dsc'
           tree -L 2 sbuild
 
       - name: Upload build artifacts
