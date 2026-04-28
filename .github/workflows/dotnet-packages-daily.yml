@@ -78,7 +78,7 @@ jobs:
           echo "Derived build-id: ${BUILD_ID}"
 
       - name: Install devscripts
-        run: sudo apt-get install -y --no-install-recommends devscripts
+        run: sudo apt-get install -y devscripts
 
       - name: Update changelog
         env:
@@ -107,11 +107,26 @@ jobs:
 
       - name: Generate source package
         run: |
-          mkdir -p dotnet-source-build/dist
-          cp "${{ steps.build-tarball.outputs.tarball-path }}" dotnet-source-build/dist/
+          # flamenco runs under snap confinement with the 'home' plug, so it can
+          # only access paths under the user's $HOME. Copy everything it needs
+          # into a dedicated user's home, run it there, then retrieve the output.
+          sudo useradd --create-home flamenco-ci
+          FLAMENCO_HOME=$(sudo -H -u flamenco-ci bash -c 'echo $HOME')
 
-          cd dotnet-source-build
-          flamenco pack dotnet10:noble
+          # Copy the dotnet-source-build tree and the orig tarball into $HOME
+          sudo cp -r ${{ github.workspace }}/dotnet-source-build "${FLAMENCO_HOME}/dotnet-source-build"
+          sudo mkdir -p "${FLAMENCO_HOME}/dotnet-source-build/dist"
+          sudo cp "${{ steps.build-tarball.outputs.tarball-path }}" "${FLAMENCO_HOME}/dotnet-source-build/dist/"
+          sudo chown -R flamenco-ci:flamenco-ci "${FLAMENCO_HOME}/dotnet-source-build"
+
+          # Run flamenco from within $HOME so snap confinement is satisfied
+          sudo -H -u flamenco-ci bash -c \
+            'cd "$HOME/dotnet-source-build" && flamenco pack dotnet10:noble'
+
+          # Retrieve the generated source package back to the workspace
+          mkdir -p ${{ github.workspace }}/dotnet-source-build/dist
+          sudo cp "${FLAMENCO_HOME}/dotnet-source-build/dist"/dotnet10_* \
+            ${{ github.workspace }}/dotnet-source-build/dist/
 
       - name: Upload source package artifact
         uses: actions/upload-artifact@v7
