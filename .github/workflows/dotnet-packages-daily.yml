@@ -136,6 +136,7 @@ jobs:
           path: dotnet-source-build/dist/dotnet10_*
           if-no-files-found: error
           include-hidden-files: true
+          retention-days: 7
 
   build-source-package:
     name: Build .NET source package
@@ -156,10 +157,10 @@ jobs:
 
       - name: Setup build prerequisites
         run: |
+          tree -L 2
+
           sudo apt-get update
           sudo apt-get install -y sbuild ubuntu-dev-tools tree
-
-          tree -L 2
 
           # Create $HOME/.mk-sbuild.rc file
           cat <<EOF > ${HOME}/.mk-sbuild.rc
@@ -178,13 +179,14 @@ jobs:
 
       - name: Build source package
         run: |
-          sg sbuild -c 'sbuild -d noble dotnet10_*.dsc'
+          sg sbuild -c 'sbuild --verbose --dist=noble ${{ github.workspace }}/dotnet10_*.dsc'
           tree -L 2 sbuild
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v7
         with:
           name: dotnet10-noble-deb-packages
-          path: sbuild/build/*.deb
+          path: ~/sbuild/build/*.deb
           if-no-files-found: error
+          retention-days: 7
 

@@ -28,9 +28,9 @@ $distribution = 'resolute';
 $build_arch_all = 1;
 $build_arch_any = 1;
 # Build the source package in addition to the other requested build artifacts; this is the same as passing `-s` to sbuild.
-$build_source = 1;
+$build_source = 0;
 # Produce a .changes file suitable for a source-only upload; this is the same as passing `--source-only-changes` to sbuild.
-$source_only_changes = 1;
+$source_only_changes = 0;
 
 # Default chroot (defaults to distribution[-arch][-sbuild])
 #$chroot = 'unstable-powerpc-sbuild';
