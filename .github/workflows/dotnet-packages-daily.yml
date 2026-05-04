@@ -180,22 +180,33 @@ jobs:
           sudo apt-get install -y sbuild ubuntu-dev-tools tree
 
           # Create $HOME/.mk-sbuild.rc file
+          echo "Creating ${HOME}/.mk-sbuild.rc with schroot configuration for sbuild."
           cat <<EOF > ${HOME}/.mk-sbuild.rc
           SCHROOT_CONF_SUFFIX="source-root-users=root,sbuild,admin
           source-root-groups=root,sbuild,admin
           preserve-environment=true"
           EOF
+          echo "Contents of ${HOME}/.mk-sbuild.rc:"
+          cat ${HOME}/.mk-sbuild.rc
 
           # Create .sbuildrc file
+          echo "Creating ${HOME}/.sbuildrc with sbuild configuration."
           cp dotnet/sbuildrc.pl ${HOME}/.sbuildrc
           mkdir -p ${HOME}/sbuild/{build,logs,stats,scratch}
+          echo "Contents of ${HOME}/.sbuildrc:"
+          cat ${HOME}/.sbuildrc
 
           # Set up schroot's fstab configuration in the runner
+          echo "Setting up schroot fstab configuration for sbuild."
           echo "/home/runner /home/runner none rw,bind 0 0" | sudo tee /etc/schroot/sbuild/fstab
           echo "/home/runner/sbuild/scratch /scratch none rw,bind 0 0" | sudo tee -a /etc/schroot/sbuild/fstab
+          echo "Contents of /etc/schroot/sbuild/fstab:"
+          cat /etc/schroot/sbuild/fstab
 
           # Add runner to the sbuild group and set up the schroot.
+          echo "Adding user 'runner' to 'sbuild' group and setting up schroot."
           sudo usermod -aG sbuild $USER
+          echo "Creating schroot"
           sg sbuild -c 'mk-sbuild noble'
 
       - name: Build source package
