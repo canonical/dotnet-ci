@@ -164,7 +164,7 @@ jobs:
 
           # Run flamenco from within $HOME so snap confinement is satisfied
           sudo -H -u flamenco-ci bash -c \
-            "cd \"$HOME/dotnet-source-build\" && flamenco pack ${{ steps.derive-versions.outputs.source-pkg-name }}:${{ steps.derive-versions.outputs.ubuntu-release }}"
+            "cd \"${FLAMENCO_HOME}/dotnet-source-build\" && flamenco pack ${{ steps.derive-versions.outputs.source-pkg-name }}:${{ steps.derive-versions.outputs.ubuntu-release }}"
 
           # Retrieve the generated source package back to the workspace
           mkdir -p ${{ github.workspace }}/dotnet-source-build/dist
