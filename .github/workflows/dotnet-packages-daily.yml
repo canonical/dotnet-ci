@@ -8,6 +8,7 @@ jobs:
     name: Prepare .NET source package
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         ubuntu-version:
           - "26.04:resolute"
@@ -163,8 +164,7 @@ jobs:
 
           # Run flamenco from within $HOME so snap confinement is satisfied
           sudo -H -u flamenco-ci bash -c \
-            "cd \"$HOME/dotnet-source-build\" && \
-            flamenco pack ${{ steps.derive-versions.outputs.source-pkg-name }}:${{ steps.derive-versions.outputs.ubuntu-release }}"
+            "cd \"$HOME/dotnet-source-build\" && flamenco pack ${{ steps.derive-versions.outputs.source-pkg-name }}:${{ steps.derive-versions.outputs.ubuntu-release }}"
 
           # Retrieve the generated source package back to the workspace
           mkdir -p ${{ github.workspace }}/dotnet-source-build/dist
@@ -186,6 +186,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: prepare-source-package
     strategy:
+      fail-fast: false
       matrix:
         ubuntu-release:
           - "resolute"
