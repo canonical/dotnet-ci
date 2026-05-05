@@ -212,13 +212,17 @@ jobs:
       - name: Build source package
         run: |
           sg sbuild -c 'sbuild --verbose --dist=noble ${{ github.workspace }}/dotnet10_*.dsc'
-          tree -L 2 sbuild
+
+      - name: List generated files
+        run: |
+          echo "Listing generated files:"
+          tree -L 3 /home/runner/sbuild
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v7
         with:
           name: dotnet10-noble-deb-packages
-          path: ~/sbuild/build/*.deb
+          path: /home/runner/sbuild/build/*.deb
           if-no-files-found: error
           retention-days: 7
 
