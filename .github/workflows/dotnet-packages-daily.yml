@@ -7,6 +7,17 @@ jobs:
   prepare-source-package:
     name: Prepare .NET source package
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ubuntu-version:
+          - "26.04:resolute"
+          - "25.10:questing"
+          - "24.04:noble"
+        dotnet-git-branch:
+          # - "main" # .NET 11 packaging still not available
+          - "release/10.0.1xx"
+          - "release/9.0.1xx"
+          - "release/8.0.1xx"
     defaults:
       run:
         shell: bash
@@ -27,7 +38,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: dotnet/dotnet
-          ref: release/10.0.1xx
+          ref: ${{ matrix.dotnet-git-branch }}
           sparse-checkout: |
             src/sdk/eng/Versions.props
             src/runtime/eng/Versions.props
@@ -63,6 +74,19 @@ jobs:
       - name: Derive build ID and source version
         id: derive-versions
         run: |
+          UBUNTU_VERSION=$(echo "${{ matrix.ubuntu-version }}" | cut -d: -f1)
+          UBUNTU_RELEASE=$(echo "${{ matrix.ubuntu-version }}" | cut -d: -f2)
+          echo "ubuntu-version=${UBUNTU_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "ubuntu-release=${UBUNTU_RELEASE}" >> "$GITHUB_OUTPUT"
+
+          # Transform the branch name (e.g. "release/10.0.1xx") into a flamenco source name (e.g. "dotnet10").
+          DOTNET_SOURCE_PKG_NAME=${{ matrix.dotnet-git-branch }}
+          DOTNET_SOURCE_PKG_NAME=${DOTNET_SOURCE_PKG_NAME#release/} # Remove "release/" prefix
+          DOTNET_SOURCE_PKG_NAME=${DOTNET_SOURCE_PKG_NAME%%.*} # Remove everything after the first dot
+          DOTNET_SOURCE_PKG_NAME="dotnet${DOTNET_SOURCE_PKG_NAME}"
+          echo "Derived DOTNET_SOURCE_PKG_NAME: ${DOTNET_SOURCE_PKG_NAME}"
+          echo "source-pkg-name=${DOTNET_SOURCE_PKG_NAME}" >> "$GITHUB_OUTPUT"
+
           # Read the version directly from the dotnet/dotnet source tree.
           # For a release branch, the script returns e.g. "10.0.107-10.0.7-0ubuntu1".
           SCRIPT_VERSION=$(python3 toolchains-ci/dotnet/get_version.py \
@@ -74,7 +98,7 @@ jobs:
           SOURCE_VERSION="${SCRIPT_VERSION%%-0ubuntu*}"
 
           CHANGELOG_VERSION=$(dpkg-parsechangelog \
-            --file dotnet-source-build/src/changelog.dotnet10.noble \
+            --file dotnet-source-build/src/changelog.${DOTNET_SOURCE_PKG_NAME}.${UBUNTU_RELEASE} \
             --show-field Version \
             --count 1)
 
@@ -85,7 +109,7 @@ jobs:
           echo "Derived source-version: ${SOURCE_VERSION}"
           echo "Derived build-id: ${BUILD_ID}"
 
-          FULL_NEW_VERSION="${SOURCE_VERSION}-0ubuntu1~24.04.1"
+          FULL_NEW_VERSION="${SOURCE_VERSION}-0ubuntu1~${UBUNTU_VERSION}.1"
           if dpkg --compare-versions "${FULL_NEW_VERSION}" eq "${CHANGELOG_VERSION}"; then
             echo "Version ${SOURCE_VERSION} already at top of changelog, skipping update."
             echo "version-changed=false" >> "$GITHUB_OUTPUT"
@@ -102,11 +126,11 @@ jobs:
           DEBFULLNAME: Ubuntu Toolchains CI
           DEBEMAIL: noreply@canonical.com
         run: |
-          NEW_VERSION="${{ steps.derive-versions.outputs.source-version }}-0ubuntu1~24.04.1"
+          NEW_VERSION="${{ steps.derive-versions.outputs.source-version }}-0ubuntu1~${{ steps.derive-versions.outputs.ubuntu-version }}.1"
           dch \
-            --changelog dotnet-source-build/src/changelog.dotnet10.noble \
+            --changelog dotnet-source-build/src/changelog.${{ steps.derive-versions.outputs.source-pkg-name }}.${{ steps.derive-versions.outputs.ubuntu-release }} \
             --newversion "${NEW_VERSION}" \
-            --distribution noble \
+            --distribution ${{ steps.derive-versions.outputs.ubuntu-release }} \
             --no-auto-nmu \
             --check-dirname-level 0 \
             "New upstream release."
@@ -117,12 +141,13 @@ jobs:
         with:
           build-id: ${{ steps.derive-versions.outputs.build-id }}
           deterministic: false
-          git-commitish: release/10.0.1xx
+          git-commitish: ${{ matrix.dotnet-git-branch }}
           git-repository: https://github.com/dotnet/dotnet
           source-version: ${{ steps.derive-versions.outputs.source-version }}
           vendor-name: 'Canonical Ltd.'
 
       - name: Generate source package
+        id: generate-source-package
         run: |
           # flamenco runs under snap confinement with the 'home' plug, so it can
           # only access paths under the user's $HOME. Copy everything it needs
@@ -138,19 +163,20 @@ jobs:
 
           # Run flamenco from within $HOME so snap confinement is satisfied
           sudo -H -u flamenco-ci bash -c \
-            'cd "$HOME/dotnet-source-build" && flamenco pack dotnet10:noble'
+            "cd \"$HOME/dotnet-source-build\" && \
+            flamenco pack ${{ steps.derive-versions.outputs.source-pkg-name }}:${{ steps.derive-versions.outputs.ubuntu-release }}"
 
           # Retrieve the generated source package back to the workspace
           mkdir -p ${{ github.workspace }}/dotnet-source-build/dist
-          sudo cp "${FLAMENCO_HOME}/dotnet-source-build/dist"/dotnet10_* \
+          sudo cp "${FLAMENCO_HOME}/dotnet-source-build/dist"/${{ steps.derive-versions.outputs.source-pkg-name }}_* \
             ${{ github.workspace }}/dotnet-source-build/dist/
 
       - name: Upload source package artifact
         uses: actions/upload-artifact@v7
         with:
-          name: dotnet10-noble-source-package
+          name: ${{ steps.derive-versions.outputs.source-pkg-name }}-${{ steps.derive-versions.outputs.ubuntu-release }}-source-package
           # We purposely leave out the unpacked tarball
-          path: dotnet-source-build/dist/dotnet10_*
+          path: dotnet-source-build/dist/${{ steps.derive-versions.outputs.source-pkg-name }}_*
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 7
@@ -159,6 +185,16 @@ jobs:
     name: Build .NET source package
     runs-on: ubuntu-latest
     needs: prepare-source-package
+    strategy:
+      matrix:
+        ubuntu-release:
+          - "resolute"
+          - "questing"
+          - "noble"
+        dotnet-source-packages:
+          - "dotnet10"
+          - "dotnet9"
+          - "dotnet8"
     defaults:
       run:
         shell: bash
@@ -170,7 +206,7 @@ jobs:
       - name: Download source package artifact
         uses: actions/download-artifact@v8
         with:
-          name: dotnet10-noble-source-package
+          name: ${{ matrix.dotnet-source-packages }}-${{ matrix.ubuntu-release }}-source-package
 
       - name: Setup build prerequisites
         run: |
@@ -207,11 +243,11 @@ jobs:
           echo "Adding user 'runner' to 'sbuild' group and setting up schroot."
           sudo usermod -aG sbuild $USER
           echo "Creating schroot"
-          sg sbuild -c 'mk-sbuild noble'
+          sg sbuild -c 'mk-sbuild ${{ matrix.ubuntu-release }}'
 
       - name: Build source package
         run: |
-          sg sbuild -c 'sbuild --verbose --dist=noble ${{ github.workspace }}/dotnet10_*.dsc'
+          sg sbuild -c 'sbuild --verbose --dist=${{ matrix.ubuntu-release }} ${{ github.workspace }}/${{ matrix.dotnet-source-packages }}_*.dsc'
 
       - name: List generated files
         run: |
@@ -221,7 +257,7 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: dotnet10-noble-deb-packages
+          name: ${{ matrix.dotnet-source-packages }}-${{ matrix.ubuntu-release }}-deb-packages
           path: /home/runner/sbuild/build/*.deb
           if-no-files-found: error
           retention-days: 7
