@@ -198,7 +198,7 @@ jobs:
 
           # Set up schroot's fstab configuration in the runner
           echo "Setting up schroot fstab configuration for sbuild."
-          echo "/home/runner /home/runner none rw,bind 0 0" | sudo tee /etc/schroot/sbuild/fstab
+          echo "/home/runner /home/runner none rw,bind 0 0" | sudo tee -a /etc/schroot/sbuild/fstab
           echo "/home/runner/sbuild/scratch /scratch none rw,bind 0 0" | sudo tee -a /etc/schroot/sbuild/fstab
           echo "Contents of /etc/schroot/sbuild/fstab:"
           cat /etc/schroot/sbuild/fstab
