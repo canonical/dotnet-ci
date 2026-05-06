@@ -233,13 +233,13 @@ jobs:
 
           # Set up schroot's fstab configuration in the runner
           echo "Setting up schroot fstab configuration for sbuild."
-          echo "/home/runner /home/runner none rw,bind 0 0" | sudo tee -a /etc/schroot/sbuild/fstab
-          echo "/home/runner/sbuild/scratch /scratch none rw,bind 0 0" | sudo tee -a /etc/schroot/sbuild/fstab
+          echo "${HOME} ${HOME} none rw,bind 0 0" | sudo tee -a /etc/schroot/sbuild/fstab
+          echo "${HOME}/sbuild/scratch /scratch none rw,bind 0 0" | sudo tee -a /etc/schroot/sbuild/fstab
           echo "Contents of /etc/schroot/sbuild/fstab:"
           cat /etc/schroot/sbuild/fstab
 
-          # Add runner to the sbuild group and set up the schroot.
-          echo "Adding user 'runner' to 'sbuild' group and setting up schroot."
+          # Add ubuntu to the sbuild group and set up the schroot.
+          echo "Adding user 'ubuntu' to 'sbuild' group and setting up schroot."
           sudo usermod -aG sbuild $USER
           echo "Creating schroot"
           sg sbuild -c 'mk-sbuild ${{ matrix.ubuntu-release }}'
@@ -251,13 +251,13 @@ jobs:
       - name: List generated files
         run: |
           echo "Listing generated files:"
-          tree -L 3 /home/runner/sbuild
+          tree -L 3 ${HOME}/sbuild
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.dotnet-source-packages }}-${{ matrix.ubuntu-release }}-deb-packages
-          path: /home/runner/sbuild/build/*.deb
+          path: /home/ubuntu/sbuild/build/*.deb
           if-no-files-found: error
           retention-days: 7
 
