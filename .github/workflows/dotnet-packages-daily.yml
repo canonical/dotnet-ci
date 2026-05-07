@@ -35,13 +35,27 @@ jobs:
           repository: canonical/dotnet-source-build
           path: dotnet-source-build
 
-      - name: Checkout dotnet/dotnet for version detection
+      - name: Checkout dotnet/dotnet for version detection (.NET 9+)
+        if: matrix.dotnet-git-branch != 'release/8.0.1xx'
         uses: actions/checkout@v6
         with:
           repository: dotnet/dotnet
           ref: ${{ matrix.dotnet-git-branch }}
           sparse-checkout: |
             src/sdk/eng/Versions.props
+            src/runtime/eng/Versions.props
+          sparse-checkout-cone-mode: false
+          fetch-depth: 1
+          path: dotnet-dotnet
+
+      - name: Checkout dotnet/dotnet for version detection (.NET 8)
+        if: matrix.dotnet-git-branch == 'release/8.0.1xx'
+        uses: actions/checkout@v6
+        with:
+          repository: dotnet/dotnet
+          ref: ${{ matrix.dotnet-git-branch }}
+          sparse-checkout: |
+            src/installer/eng/Versions.props
             src/runtime/eng/Versions.props
           sparse-checkout-cone-mode: false
           fetch-depth: 1
