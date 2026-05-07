@@ -43,16 +43,12 @@ def read_xml_property(props_file: Path, *property_names: str) -> dict[str, str]:
 def get_sdk_version(repo_root: Path, major_version: int | None, include_prerelease: bool = True) -> str:
     """Read and return the .NET SDK version string from the repository."""
     props_file = repo_root / "src" / "sdk" / "eng" / "Versions.props"
+    if major_version == 8:
+        props_file = repo_root / "src" / "installer" / "eng" / "Versions.props"
+
     if not props_file.exists():
         print(f"error: {props_file} not found", file=sys.stderr)
         sys.exit(1)
-
-    if major_version == 8:
-        props = read_xml_property(props_file, "VersionPrefix")
-        if "VersionPrefix" not in props:
-            print("error: VersionPrefix not found in Versions.props", file=sys.stderr)
-            sys.exit(1)
-        return props["VersionPrefix"]
 
     props = read_xml_property(
         props_file,
