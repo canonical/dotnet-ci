@@ -30,8 +30,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes autopkgtest qemu-system-x86 tree
 
+      - name: Grant KVM permissions
+        run: sudo usermod -aG kvm $USER
+
       - name: Build autopkgtest runner image
-        run: autopkgtest-buildvm-ubuntu-cloud --release noble --verbose --cpus $(nproc) --output ${{ github.workspace }}
+        run: sg kvm -c "autopkgtest-buildvm-ubuntu-cloud --release noble --verbose --cpus $(nproc) --output ${{ github.workspace }}"
 
       - name: Run autopkgtest
         run: |
