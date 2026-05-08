@@ -278,3 +278,67 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  test-source-package:
+    runs-on: ubuntu-latest
+    if: always()
+    strategy:
+      fail-fast: false
+      matrix:
+        ubuntu-release:
+          - "resolute"
+          - "questing"
+          - "noble"
+        dotnet-source-packages:
+          - "dotnet10"
+          - "dotnet9"
+          - "dotnet8"
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Download source package artifact
+        id: download-source-package
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ matrix.dotnet-source-packages }}-${{ matrix.ubuntu-release }}-source-package
+
+      - name: Download binary packages artifact
+        id: download-binary-packages
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ matrix.dotnet-source-packages }}-${{ matrix.ubuntu-release }}-deb-packages
+
+      - name: Install test prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes autopkgtest qemu-system-x86 genisoimage distro-info tree
+
+      - name: Grant KVM permissions
+        run: sudo chown $USER /dev/kvm
+
+      - name: Build autopkgtest runner image
+        run: |
+          autopkgtest-buildvm-ubuntu-cloud \
+            --release ${{ matrix.ubuntu-release }} \
+            --verbose \
+            --cpus $(nproc) \
+            --output ${{ github.workspace }}
+
+      - name: Run autopkgtest
+        run: |
+          echo "Binary packages download path content:"
+          tree ${{ steps.download-binary-packages.outputs.download-path }}
+
+          echo "Source package download path content:"
+          tree ${{ steps.download-source-package.outputs.download-path }}
+
+          autopkgtest \
+            --no-built-binaries \
+            --apt-upgrade \
+            --env=REGULAR_TESTS_IGNORE_NU1102_ERRORS=1 --env=REGULAR_TESTS_TOOLCHAINS_CI=1 \
+            --copy=${{ steps.download-binary-packages.outputs.download-path }}:/home/ubuntu/dotnet-packages \
+            --setup-commands="sudo apt-get install --yes /home/ubuntu/dotnet-packages/*.deb" \
+            ${{ steps.download-source-package.outputs.download-path }}/${{ matrix.dotnet-source-packages }}_*.dsc -- \
+              qemu -c $(nproc) ${{ github.workspace }}/autopkgtest-${{ matrix.ubuntu-release }}-amd64.img
+
